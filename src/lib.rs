@@ -5,10 +5,7 @@ use std::{
     ptr::{self, drop_in_place, NonNull},
 };
 
-use libc::{
-    c_char, c_void, close, ftruncate, mmap, munmap, shm_open, shm_unlink, MAP_SHARED, O_CREAT,
-    O_RDWR, PROT_WRITE, S_IRUSR, S_IWUSR,
-};
+use libc::{c_char, c_void, close, ftruncate, mmap, munmap, shm_open, shm_unlink, MAP_SHARED, O_CREAT, O_EXCL, O_RDWR, PROT_READ, PROT_WRITE, S_IRUSR, S_IWUSR};
 
 pub struct Builder {
     id: String,
@@ -70,13 +67,18 @@ impl BuilderWithSize {
             let storage_id: *const c_char = self.id.as_bytes().as_ptr() as *const c_char;
 
             // open the existing shared memory if exists
-            let fd = shm_open(storage_id, O_RDWR, S_IRUSR | S_IWUSR);
+            let fd = shm_open(storage_id, O_CREAT | O_EXCL | O_RDWR, 0o600);
 
             // shared memory didn't exist
             if fd < 0 {
-                // create the shared memory
-                let fd = shm_open(storage_id, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
-                if fd < 0 {
+                let err = std::io::Error::last_os_error();
+                if err.raw_os_error() == Some(libc::EEXIST) {
+                    // The shared memory object already exists, so open it without O_EXCL
+                    let fd = shm_open(storage_id, O_RDWR, 0o600);
+                    if fd < 0 {
+                        return Err(ShmemError::CreateFailedErr);
+                    }
+                } else {
                     return Err(ShmemError::CreateFailedErr);
                 }
 
@@ -93,7 +95,7 @@ impl BuilderWithSize {
         };
 
         let null = ptr::null_mut();
-        let addr = unsafe { mmap(null, self.size as usize, PROT_WRITE, MAP_SHARED, fd, 0) };
+        let addr = unsafe { mmap(null, self.size as usize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0) };
 
         Ok(ShmemConf {
             id: self.id,
@@ -174,6 +176,10 @@ impl ShmemConf {
             ptr: self.addr.cast(),
             conf: self,
         }
+    }
+
+    pub fn is_owner(&self) -> bool {
+        self.is_owner
     }
 }
 
