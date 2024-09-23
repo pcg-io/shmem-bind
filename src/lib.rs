@@ -86,10 +86,10 @@ impl BuilderWithSize {
                     if fd < 0 {
                         return Err(ShmemError::CreateFailedErr);
                     }
+                    (fd, false)
                 } else {
                     return Err(ShmemError::CreateFailedErr);
                 }
-                (fd, false)
             }
         };
 
