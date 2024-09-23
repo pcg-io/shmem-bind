@@ -70,7 +70,15 @@ impl BuilderWithSize {
             let fd = shm_open(storage_id, O_CREAT | O_EXCL | O_RDWR, 0o600);
 
             // shared memory didn't exist
-            if fd < 0 {
+            if fd >= 0 {
+                // allocate the shared memory with required size
+                let res = ftruncate(fd, self.size);
+                if res < 0 {
+                    return Err(ShmemError::AllocationFailedErr);
+                }
+
+                (fd, true)
+            } else {
                 let err = std::io::Error::last_os_error();
                 if err.raw_os_error() == Some(libc::EEXIST) {
                     // The shared memory object already exists, so open it without O_EXCL
@@ -81,15 +89,6 @@ impl BuilderWithSize {
                 } else {
                     return Err(ShmemError::CreateFailedErr);
                 }
-
-                // allocate the shared memory with required size
-                let res = ftruncate(fd, self.size);
-                if res < 0 {
-                    return Err(ShmemError::AllocationFailedErr);
-                }
-
-                (fd, true)
-            } else {
                 (fd, false)
             }
         };
