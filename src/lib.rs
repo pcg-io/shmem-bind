@@ -282,6 +282,10 @@ impl<T> ShmemBox<T> {
         // disabling cleanup for shared memory
         shmem_box.conf.is_owner = false;
     }
+    
+    pub fn as_ptr(&self) -> *mut T {
+        self.ptr.as_ptr()
+    }
 }
 
 impl<T> Drop for ShmemBox<T> {
