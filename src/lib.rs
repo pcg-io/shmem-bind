@@ -4,8 +4,8 @@ use std::{
     ops::{Deref, DerefMut},
     ptr::{self, drop_in_place, NonNull},
 };
-
-use libc::{c_char, c_void, close, ftruncate, mmap, munmap, shm_open, shm_unlink, MAP_SHARED, O_CREAT, O_EXCL, O_RDWR, PROT_READ, PROT_WRITE, S_IRUSR, S_IWUSR};
+use std::ffi::CString;
+use libc::{c_char, c_void, close, ftruncate, mmap, munmap, shm_open, shm_unlink, MAP_SHARED, O_CREAT, O_EXCL, O_RDWR, PROT_READ, PROT_WRITE};
 
 pub struct Builder {
     id: String,
@@ -64,10 +64,10 @@ impl BuilderWithSize {
     ///```
     pub fn open(self) -> Result<ShmemConf, ShmemError> {
         let (fd, is_owner) = unsafe {
-            let storage_id: *const c_char = self.id.as_bytes().as_ptr() as *const c_char;
+            let storage_id = CString::new(self.id.as_bytes()).unwrap();  // Ensure proper null termination
 
             // open the existing shared memory if exists
-            let fd = shm_open(storage_id, O_CREAT | O_EXCL | O_RDWR, 0o600);
+            let fd = shm_open(storage_id.as_ptr(), O_CREAT | O_EXCL | O_RDWR, 0o600);
 
             // shared memory didn't exist
             if fd >= 0 {
@@ -82,7 +82,7 @@ impl BuilderWithSize {
                 let err = std::io::Error::last_os_error();
                 if err.raw_os_error() == Some(libc::EEXIST) {
                     // The shared memory object already exists, so open it without O_EXCL
-                    let fd = shm_open(storage_id, O_RDWR, 0o600);
+                    let fd = shm_open(storage_id.as_ptr(), O_RDWR, 0o600);
                     if fd < 0 {
                         return Err(ShmemError::CreateFailedErr);
                     }
